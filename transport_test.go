@@ -19,7 +19,7 @@ func TestTransportError(t *testing.T) {
 		buf: make([]byte, os.Getpagesize()),
 	}
 	r := &transport{
-		in: recvr,
+		in:  recvr,
 		buf: make([]byte, os.Getpagesize()),
 	}
 

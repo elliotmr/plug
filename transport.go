@@ -19,6 +19,9 @@ import (
  *   it should have at least a page allocated to start
  */
 
+// Service is used to enumerate the available services for the plugin
+// transport. It is used by the generated code from `protoc-gen-plug`
+// and should not be needed by a plugin consumer or author.
 type Service byte
 
 type transport struct {
@@ -31,7 +34,6 @@ const (
 	serviceError Service = 254
 	serviceNone  Service = 255
 )
-
 
 func (t *transport) sendError(err error) {
 	t.buf = t.buf[:0]

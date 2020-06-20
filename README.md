@@ -1,3 +1,6 @@
+[![go.dev reference](https://img.shields.io/badge/go.dev-reference-007d9c?logo=go&logoColor=white&style=flat-square)](https://pkg.go.dev/github.com/elliotmr/plug)
+[![Go Report Card](https://goreportcard.com/badge/github.com/elliotmr/plug)](https://goreportcard.com/report/github.com/elliotmr/plug)
+
 # plug
 
 plug is a minimal plugin system for go based on the amazing 

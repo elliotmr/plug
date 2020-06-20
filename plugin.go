@@ -20,6 +20,9 @@ type plugin struct {
 	t *transport
 }
 
+// Run is the entrypoint for the plugin implementation. You must
+// pass your implementation wrapped in your generated plugin to
+// this function. Run will block forever.
 func Run(genPlugin GenPlugin) error {
 	fiIn, err := os.Stdin.Stat()
 	if err != nil {
@@ -29,13 +32,13 @@ func Run(genPlugin GenPlugin) error {
 	if err != nil {
 		return fmt.Errorf("unable to stat stdout: %w", err)
 	}
-	if fiIn.Mode() & fiOut.Mode() & os.ModeNamedPipe == 0 {
+	if fiIn.Mode()&fiOut.Mode()&os.ModeNamedPipe == 0 {
 		return fmt.Errorf("both stdin and stdout must be pipes")
 	}
 	s := &plugin{
 		g: genPlugin,
 		t: &transport{
-			in: os.Stdin,
+			in:  os.Stdin,
 			out: os.Stdout,
 			buf: make([]byte, os.Getpagesize()),
 		},
