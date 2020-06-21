@@ -5,17 +5,20 @@
 
 plug is a minimal plugin system for go based on the amazing 
 [Hashicorp go-plugin](https://github.com/hashicorp/go-plugin) system.
-It uses the same basic concept of launching the plugin as a sub-process
-using the `os/exec` package from the standard library and communicating
-with the process with the plugin through IPC. Here are a few differences:
+It uses the same basic concept of launching the plugin as a subprocess
+using the `os/exec` package. It then communicates with the plugin process
+using IPC and serialized protobufs. Here are a few differences:
 
-- The interface will be generated automatically using a new protobuf code
-  generator called `protoc-gen-plug`
+- The plugin interface will be generated automatically using a new protobuf
+  code generator called `protoc-gen-plug`.
 - Instead of attaching the stdin/stdout streams to the host process it uses
   them for communication between the plugin and host.
 - It uses a custom protocol for communication between the host and plugin,
   this is much faster but also has fewer bells and whistles. There are many
   limitations that will probably not be addressed.
+  
+If you want a system that is battle tested and well-supported, please use
+Hashicorp's go-plugin system. If you need something very simple that 
   
 ## Usage
 
