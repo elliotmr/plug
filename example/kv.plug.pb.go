@@ -4,13 +4,13 @@ package example
 
 import (
 	fmt "fmt"
-	plug "github.com/elliotmr/plug"
+	runtime "github.com/elliotmr/plug/pkg/runtime"
 	proto "google.golang.org/protobuf/proto"
 )
 
 const (
-	GetService plug.Service = 0
-	PutService plug.Service = 1
+	GetService runtime.Service = 0
+	PutService runtime.Service = 1
 )
 
 type KV interface {
@@ -18,11 +18,16 @@ type KV interface {
 	Put(key string, value []byte) error
 }
 
-type KVPlugin struct {
+type kvPlugin struct {
 	Impl KV
 }
 
-func (x *KVPlugin) Link(srv plug.Service) (proto.Message, plug.GenPluginMethod, error) {
+func Run(impl KV) error {
+	s := &kvPlugin{Impl: impl}
+	return runtime.Run(s)
+}
+
+func (x *kvPlugin) Link(srv runtime.Service) (proto.Message, runtime.GenPluginMethod, error) {
 	switch srv {
 	case GetService:
 		return &GetRequest{}, x.Get, nil
@@ -32,7 +37,7 @@ func (x *KVPlugin) Link(srv plug.Service) (proto.Message, plug.GenPluginMethod, 
 	return nil, nil, fmt.Errorf("unknown service: %d", srv)
 }
 
-func (x *KVPlugin) Get(req proto.Message) (proto.Message, error) {
+func (x *kvPlugin) Get(req proto.Message) (proto.Message, error) {
 	in, ok := req.(*GetRequest)
 	if !ok {
 		return nil, fmt.Errorf("invalid request type")
@@ -41,7 +46,7 @@ func (x *KVPlugin) Get(req proto.Message) (proto.Message, error) {
 	return &GetResponse{Value: value}, err
 }
 
-func (x *KVPlugin) Put(req proto.Message) (proto.Message, error) {
+func (x *kvPlugin) Put(req proto.Message) (proto.Message, error) {
 	in, ok := req.(*PutRequest)
 	if !ok {
 		return nil, fmt.Errorf("invalid request type")
@@ -50,26 +55,35 @@ func (x *KVPlugin) Put(req proto.Message) (proto.Message, error) {
 	return &Empty{}, err
 }
 
-type KVHost struct {
-	c *plug.Host
+type kvHost struct {
+	c *runtime.Host
 }
 
-func Load(filename string) (*KVHost, error) {
-	c, err := plug.LaunchPlugin(filename)
+func Load(filename string) (KV, error) {
+	c, err := runtime.Load(filename)
 	if err != nil {
 		return nil, fmt.Errorf("unable to load plugin: %w", err)
 	}
-	return &KVHost{c: c}, nil
+	return &kvHost{c: c}, nil
 }
 
-func (x *KVHost) Get(key string) ([]byte, error) {
+func (x *kvHost) Get(key string) ([]byte, error) {
 	resp := &GetResponse{}
 	err := x.c.SendRecv(GetService, &GetRequest{Key: key}, resp)
 	return resp.Value, err
 }
 
-func (x *KVHost) Put(key string, value []byte) error {
+func (x *kvHost) Put(key string, value []byte) error {
 	resp := &Empty{}
 	err := x.c.SendRecv(PutService, &PutRequest{Key: key, Value: value}, resp)
 	return err
+}
+
+func Test(impl KV) (KV, error) {
+	s := &kvPlugin{Impl: impl}
+	c, err := runtime.Test(s)
+	if err != nil {
+		return nil, fmt.Errorf("unable to load plugin: %w", err)
+	}
+	return &kvHost{c: c}, nil
 }

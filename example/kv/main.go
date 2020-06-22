@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/elliotmr/plug"
 	"github.com/elliotmr/plug/example"
 )
 
@@ -24,8 +23,7 @@ func (k *kvImpl) Put(key string, value []byte) error {
 }
 
 func main() {
-	s := &example.KVPlugin{Impl: &kvImpl{m: make(map[string][]byte)}}
-	err := plug.Run(s)
+	err := example.Run(&kvImpl{m: make(map[string][]byte)})
 	if err != nil {
 		fmt.Println(err.Error(), ", exiting...")
 	}

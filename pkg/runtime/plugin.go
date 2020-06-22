@@ -1,4 +1,4 @@
-package plug
+package runtime
 
 import (
 	"fmt"
@@ -35,7 +35,7 @@ func Run(genPlugin GenPlugin) error {
 	if fiIn.Mode()&fiOut.Mode()&os.ModeNamedPipe == 0 {
 		return fmt.Errorf("both stdin and stdout must be pipes")
 	}
-	s := &plugin{
+	p := &plugin{
 		g: genPlugin,
 		t: &transport{
 			in:  os.Stdin,
@@ -43,35 +43,39 @@ func Run(genPlugin GenPlugin) error {
 			buf: make([]byte, os.Getpagesize()),
 		},
 	}
+	p.run()
+	return nil
+}
 
+func (p *plugin) run() {
 	for {
-		srv, buf, err := s.t.recv()
+		srv, buf, err := p.t.recv()
 		if err != nil {
-			s.t.sendError(err)
+			p.t.sendError(err)
 			continue
 		}
 
-		req, gsm, err := s.g.Link(srv)
+		req, gsm, err := p.g.Link(srv)
 		if err != nil {
-			s.t.sendError(err)
+			p.t.sendError(err)
 			continue
 		}
 
 		err = proto.Unmarshal(buf, req)
 		if err != nil {
-			s.t.sendError(err)
+			p.t.sendError(err)
 			continue
 		}
 
 		resp, err := gsm(req)
 		if err != nil {
-			s.t.sendError(err)
+			p.t.sendError(err)
 			continue
 		}
 
-		err = s.t.send(srv, resp)
+		err = p.t.send(srv, resp)
 		if err != nil {
-			s.t.sendError(err)
+			p.t.sendError(err)
 		}
 	}
 }

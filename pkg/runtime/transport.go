@@ -1,4 +1,4 @@
-package plug
+package runtime
 
 import (
 	"fmt"
@@ -41,7 +41,7 @@ func (t *transport) sendError(err error) {
 	t.buf = protowire.AppendString(t.buf, err.Error())
 	_, err = t.out.Write(t.buf)
 	if err != nil {
-		panic(err)
+		fmt.Fprintf(os.Stderr, "%v\n", err)
 	}
 }
 

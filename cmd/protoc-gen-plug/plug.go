@@ -10,9 +10,9 @@ import (
 )
 
 const (
-	fmtPackage   = protogen.GoImportPath("fmt")
-	plugPackage  = protogen.GoImportPath("github.com/elliotmr/plug")
-	protoPackage = protogen.GoImportPath("google.golang.org/protobuf/proto")
+	fmtPackage     = protogen.GoImportPath("fmt")
+	runtimePackage = protogen.GoImportPath("github.com/elliotmr/plug/pkg/runtime")
+	protoPackage   = protogen.GoImportPath("google.golang.org/protobuf/proto")
 )
 
 var errorf string
@@ -46,12 +46,21 @@ func generateFileContent(gen *protogen.Plugin, file *protogen.File, g *protogen.
 	generateInterface(gen, g, file.Services[0])
 	generatePlugin(g, file.Services[0])
 	generateHost(g, file.Services[0])
+	generateTest(g, file.Services[0])
+}
+
+func plugName(service *protogen.Service) string {
+	return strings.ToLower(service.GoName) + "Plugin"
+}
+
+func hostName(service *protogen.Service) string {
+	return strings.ToLower(service.GoName) + "Host"
 }
 
 func generateServiceConstants(gen *protogen.Plugin, g *protogen.GeneratedFile, service *protogen.Service) {
 	g.P("const (")
 	for _, method := range service.Methods {
-		s := g.QualifiedGoIdent(plugPackage.Ident("Service"))
+		s := g.QualifiedGoIdent(runtimePackage.Ident("Service"))
 		g.P(method.GoName, "Service ", s, " = ", fmt.Sprintf("%d", method.Desc.Index()))
 	}
 	g.P(")")
@@ -91,11 +100,13 @@ func generateInterfaceMethod(gen *protogen.Plugin, g *protogen.GeneratedFile, me
 }
 
 func generatePlugin(g *protogen.GeneratedFile, service *protogen.Service) {
-	g.P("type ", service.GoName, "Plugin struct {")
+
+	g.P("type ", plugName(service), " struct {")
 	g.P("Impl ", service.GoName)
 	g.P("}")
 	g.P("")
 
+	generatePluginRun(g, service)
 	generatePluginLink(g, service)
 
 	for _, method := range service.Methods {
@@ -103,10 +114,19 @@ func generatePlugin(g *protogen.GeneratedFile, service *protogen.Service) {
 	}
 }
 
+func generatePluginRun(g *protogen.GeneratedFile, service *protogen.Service) {
+	g.P("func Run(impl ", service.GoName, ") error {")
+	g.P("s := &", plugName(service), "{Impl: impl}")
+	g.P("return ", g.QualifiedGoIdent(runtimePackage.Ident("Run")), "(s)")
+	g.P("}")
+	g.P("")
+}
+
 func generatePluginLink(g *protogen.GeneratedFile, service *protogen.Service) {
-	qService := g.QualifiedGoIdent(plugPackage.Ident("Service"))
+	qService := g.QualifiedGoIdent(runtimePackage.Ident("Service"))
+	qGenPluginMethod := g.QualifiedGoIdent(runtimePackage.Ident("GenPluginMethod"))
 	pMessage := g.QualifiedGoIdent(protoPackage.Ident("Message"))
-	g.P("func (x *", service.GoName, "Plugin) Link(srv ", qService, ") (", pMessage, ", plug.GenPluginMethod, error) {")
+	g.P("func (x *", plugName(service), ") Link(srv ", qService, ") (", pMessage, ", ", qGenPluginMethod, ", error) {")
 	g.P("switch srv {")
 	for _, method := range service.Methods {
 		g.P("case ", method.GoName, "Service:")
@@ -119,7 +139,7 @@ func generatePluginLink(g *protogen.GeneratedFile, service *protogen.Service) {
 }
 
 func generatePluginMethod(g *protogen.GeneratedFile, service *protogen.Service, method *protogen.Method) {
-	g.P("func(x *", service.GoName, "Plugin) ", method.GoName, "(req proto.Message) (proto.Message, error) {")
+	g.P("func(x *", plugName(service), ") ", method.GoName, "(req proto.Message) (proto.Message, error) {")
 	g.P("in, ok := req.(*", method.Input.GoIdent, ")")
 	g.P("if !ok {")
 	g.P("return nil, ", errorf, "(\"invalid request type\")")
@@ -158,8 +178,8 @@ func generatePluginMethod(g *protogen.GeneratedFile, service *protogen.Service, 
 }
 
 func generateHost(g *protogen.GeneratedFile, service *protogen.Service) {
-	g.P("type ", service.GoName, "Host struct {")
-	g.P("c *", g.QualifiedGoIdent(plugPackage.Ident("Host")))
+	g.P("type ", hostName(service), " struct {")
+	g.P("c *", g.QualifiedGoIdent(runtimePackage.Ident("Host")))
 	g.P("}")
 	g.P("")
 
@@ -171,12 +191,12 @@ func generateHost(g *protogen.GeneratedFile, service *protogen.Service) {
 }
 
 func generateHostLoad(g *protogen.GeneratedFile, service *protogen.Service) {
-	g.P("func Load(filename string) (*", service.GoName, "Host, error) {")
-	g.P("c, err := ", g.QualifiedGoIdent(plugPackage.Ident("LaunchPlugin")), "(filename)")
+	g.P("func Load(filename string) (", service.GoName, ", error) {")
+	g.P("c, err := ", g.QualifiedGoIdent(runtimePackage.Ident("Load")), "(filename)")
 	g.P("if err != nil {")
 	g.P("return nil, ", errorf, "(\"unable to load plugin: %w\", err)")
 	g.P("}")
-	g.P("return &", service.GoName, "Host{c: c}, nil")
+	g.P("return &", hostName(service), "{c: c}, nil")
 	g.P("}")
 	g.P("")
 }
@@ -194,7 +214,7 @@ func generateHostMethod(g *protogen.GeneratedFile, service *protogen.Service, me
 	}
 	rets = append(rets, "error")
 
-	g.P("func(x *", service.GoName, "Host) ", method.GoName, "(", strings.Join(args, ", "), ") (", strings.Join(rets, ", "), ") {")
+	g.P("func(x *", hostName(service), ") ", method.GoName, "(", strings.Join(args, ", "), ") (", strings.Join(rets, ", "), ") {")
 	var wraps []string
 	for _, field := range method.Input.Fields {
 		wrap := field.GoName + ": " + string(field.Desc.Name())
@@ -216,6 +236,18 @@ func generateHostMethod(g *protogen.GeneratedFile, service *protogen.Service, me
 	g.P("resp := &", method.Output.GoIdent, "{}")
 	g.P("err := x.c.SendRecv(", method.GoName, "Service, &", method.Input.GoIdent, "{", wrapStatement, "}, resp)")
 	g.P("return ", respStatement)
+	g.P("}")
+	g.P("")
+}
+
+func generateTest(g *protogen.GeneratedFile, service *protogen.Service) {
+	g.P("func Test(impl ", service.GoName, ") (", service.GoName, ", error) {")
+	g.P("s := &", plugName(service), "{Impl: impl}")
+	g.P("c, err := ", g.QualifiedGoIdent(runtimePackage.Ident("Test")), "(s)")
+	g.P("if err != nil {")
+	g.P("return nil, ", errorf, "(\"unable to load plugin: %w\", err)")
+	g.P("}")
+	g.P("return &", hostName(service), "{c: c}, nil")
 	g.P("}")
 	g.P("")
 }

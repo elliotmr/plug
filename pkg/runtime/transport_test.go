@@ -1,4 +1,4 @@
-package plug
+package runtime
 
 import (
 	"fmt"
@@ -16,11 +16,11 @@ func TestTransportError(t *testing.T) {
 	require.NoError(t, err)
 	l := &transport{
 		out: sendl,
-		buf: make([]byte, os.Getpagesize()),
+		buf: make([]byte, 5),
 	}
 	r := &transport{
 		in:  recvr,
-		buf: make([]byte, os.Getpagesize()),
+		buf: make([]byte, 5),
 	}
 
 	l.sendError(fmt.Errorf("test error"))
