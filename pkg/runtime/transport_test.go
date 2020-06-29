@@ -2,12 +2,12 @@ package runtime
 
 import (
 	"fmt"
-	"github.com/golang/protobuf/proto"
 	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 

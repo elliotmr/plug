@@ -26,7 +26,7 @@ This package uses the new go protobuf implementation `google.golang.org/protobuf
 
 1. Install `protoc-gen-go` (from google.golang.org/protobuf) and `protoc-gen-plug`
    to your path
-2. Create a protobuf with a _single_ service definition (See `example/kv.proto`)
-3. Generate both the go and plug code (See `example/gen.go`)
-4. Implement the generated plugin interface (See `example/kv/main.go`)
-5. Use the plugin with the generated `Load` command (See `example/kv/kv_test.go`)
+2. Create a protobuf with your service definitions (See `example/example.proto`)
+3. Generate both the go and plug code (See `example/gen.sh`)
+4. Implement a generated plugin interface (See `example/kv/main.go`)
+5. Use the plugin with the generated `Load{Service}` function.
