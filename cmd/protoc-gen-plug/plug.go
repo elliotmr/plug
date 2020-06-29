@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/elliotmr/plug/pkg/plugpb"
 	"google.golang.org/protobuf/compiler/protogen"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
@@ -37,16 +39,13 @@ func generateFileContent(gen *protogen.Plugin, file *protogen.File, g *protogen.
 		return
 	}
 
-	if len(file.Services) > 1 {
-		gen.Error(errors.New("protoc-gen-plug requires a single service definition"))
-		return
+	for i, service := range file.Services {
+		generateServiceConstants(gen, g, service, i)
+		generateInterface(gen, g, service)
+		generatePlugin(g, service, i)
+		generateHost(g, service, i)
+		generateTest(g, service, i)
 	}
-
-	generateServiceConstants(gen, g, file.Services[0])
-	generateInterface(gen, g, file.Services[0])
-	generatePlugin(g, file.Services[0])
-	generateHost(g, file.Services[0])
-	generateTest(g, file.Services[0])
 }
 
 func plugName(service *protogen.Service) string {
@@ -57,20 +56,21 @@ func hostName(service *protogen.Service) string {
 	return strings.ToLower(service.GoName) + "Host"
 }
 
-func generateServiceConstants(gen *protogen.Plugin, g *protogen.GeneratedFile, service *protogen.Service) {
+func generateServiceConstants(gen *protogen.Plugin, g *protogen.GeneratedFile, service *protogen.Service, i int) {
+	if len(service.Methods) > 250 {
+		gen.Error(errors.New("protoc-gen-plug only supports 250 methods per service"))
+		return
+	}
+	s := g.QualifiedGoIdent(runtimePackage.Ident("Service"))
 	g.P("const (")
 	for _, method := range service.Methods {
-		s := g.QualifiedGoIdent(runtimePackage.Ident("Service"))
-		g.P(method.GoName, "Service ", s, " = ", fmt.Sprintf("%d", method.Desc.Index()))
+		g.P(service.GoName, method.GoName, "Service ", s, " = 0x", fmt.Sprintf("%04X", method.Desc.Index()+i<<8))
 	}
+	g.P(service.GoName, "HandshakeService ", s, " = 0x", fmt.Sprintf("%04X", 255+i<<8))
 	g.P(")")
 }
 
 func generateInterface(gen *protogen.Plugin, g *protogen.GeneratedFile, service *protogen.Service) {
-	if len(service.Methods) > 250 {
-		gen.Error(errors.New("protoc-gen-plug only supports 250 service methods"))
-		return
-	}
 	g.P("type ", service.GoName, " interface {")
 	for _, method := range service.Methods {
 		generateInterfaceMethod(gen, g, method)
@@ -86,12 +86,12 @@ func generateInterfaceMethod(gen *protogen.Plugin, g *protogen.GeneratedFile, me
 	}
 	var args []string
 	for _, field := range method.Input.Fields {
-		arg := string(field.Desc.Name()) + " " + fieldType(field.Desc)
+		arg := string(field.Desc.Name()) + " " + fieldType(g, field)
 		args = append(args, arg)
 	}
 	var rets []string
 	for _, field := range method.Output.Fields {
-		ret := fieldType(field.Desc)
+		ret := fieldType(g, field)
 		rets = append(rets, ret)
 	}
 	rets = append(rets, "error")
@@ -99,14 +99,13 @@ func generateInterfaceMethod(gen *protogen.Plugin, g *protogen.GeneratedFile, me
 	g.P(method.GoName, "(", strings.Join(args, ", "), ") (", strings.Join(rets, ", "), ")")
 }
 
-func generatePlugin(g *protogen.GeneratedFile, service *protogen.Service) {
-
+func generatePlugin(g *protogen.GeneratedFile, service *protogen.Service, i int) {
 	g.P("type ", plugName(service), " struct {")
 	g.P("Impl ", service.GoName)
 	g.P("}")
 	g.P("")
 
-	generatePluginRun(g, service)
+	generatePluginRun(g, service, i)
 	generatePluginLink(g, service)
 
 	for _, method := range service.Methods {
@@ -114,10 +113,11 @@ func generatePlugin(g *protogen.GeneratedFile, service *protogen.Service) {
 	}
 }
 
-func generatePluginRun(g *protogen.GeneratedFile, service *protogen.Service) {
-	g.P("func Run(impl ", service.GoName, ") error {")
+func generatePluginRun(g *protogen.GeneratedFile, service *protogen.Service, i int) {
+	g.P("func Run", service.GoName, "(impl ", service.GoName, ") error {")
 	g.P("s := &", plugName(service), "{Impl: impl}")
-	g.P("return ", g.QualifiedGoIdent(runtimePackage.Ident("Run")), "(s)")
+
+	g.P("return ", g.QualifiedGoIdent(runtimePackage.Ident("Run")), launchArgs(service, i))
 	g.P("}")
 	g.P("")
 }
@@ -129,7 +129,7 @@ func generatePluginLink(g *protogen.GeneratedFile, service *protogen.Service) {
 	g.P("func (x *", plugName(service), ") Link(srv ", qService, ") (", pMessage, ", ", qGenPluginMethod, ", error) {")
 	g.P("switch srv {")
 	for _, method := range service.Methods {
-		g.P("case ", method.GoName, "Service:")
+		g.P("case ", service.GoName, method.GoName, "Service:")
 		g.P("return &", method.Input.GoIdent, "{}, x.", method.GoName, ", nil")
 	}
 	g.P("}")
@@ -177,22 +177,22 @@ func generatePluginMethod(g *protogen.GeneratedFile, service *protogen.Service, 
 	g.P("")
 }
 
-func generateHost(g *protogen.GeneratedFile, service *protogen.Service) {
+func generateHost(g *protogen.GeneratedFile, service *protogen.Service, i int) {
 	g.P("type ", hostName(service), " struct {")
 	g.P("c *", g.QualifiedGoIdent(runtimePackage.Ident("Host")))
 	g.P("}")
 	g.P("")
 
-	generateHostLoad(g, service)
+	generateHostLoad(g, service, i)
 
 	for _, method := range service.Methods {
 		generateHostMethod(g, service, method)
 	}
 }
 
-func generateHostLoad(g *protogen.GeneratedFile, service *protogen.Service) {
-	g.P("func Load(filename string) (", service.GoName, ", error) {")
-	g.P("c, err := ", g.QualifiedGoIdent(runtimePackage.Ident("Load")), "(filename)")
+func generateHostLoad(g *protogen.GeneratedFile, service *protogen.Service, i int) {
+	g.P("func Load", service.GoName, "(s string) (", service.GoName, ", error) {")
+	g.P("c, err := ", g.QualifiedGoIdent(runtimePackage.Ident("Load")), launchArgs(service, i))
 	g.P("if err != nil {")
 	g.P("return nil, ", errorf, "(\"unable to load plugin: %w\", err)")
 	g.P("}")
@@ -204,12 +204,12 @@ func generateHostLoad(g *protogen.GeneratedFile, service *protogen.Service) {
 func generateHostMethod(g *protogen.GeneratedFile, service *protogen.Service, method *protogen.Method) {
 	var args []string
 	for _, field := range method.Input.Fields {
-		arg := string(field.Desc.Name()) + " " + fieldType(field.Desc)
+		arg := string(field.Desc.Name()) + " " + fieldType(g, field)
 		args = append(args, arg)
 	}
 	var rets []string
 	for _, field := range method.Output.Fields {
-		ret := fieldType(field.Desc)
+		ret := fieldType(g, field)
 		rets = append(rets, ret)
 	}
 	rets = append(rets, "error")
@@ -234,16 +234,16 @@ func generateHostMethod(g *protogen.GeneratedFile, service *protogen.Service, me
 	respStatement += "err"
 
 	g.P("resp := &", method.Output.GoIdent, "{}")
-	g.P("err := x.c.SendRecv(", method.GoName, "Service, &", method.Input.GoIdent, "{", wrapStatement, "}, resp)")
+	g.P("err := x.c.SendRecv(", service.GoName, method.GoName, "Service, &", method.Input.GoIdent, "{", wrapStatement, "}, resp)")
 	g.P("return ", respStatement)
 	g.P("}")
 	g.P("")
 }
 
-func generateTest(g *protogen.GeneratedFile, service *protogen.Service) {
-	g.P("func Test(impl ", service.GoName, ") (", service.GoName, ", error) {")
+func generateTest(g *protogen.GeneratedFile, service *protogen.Service, i int) {
+	g.P("func Test", service.GoName, "(impl ", service.GoName, ") (", service.GoName, ", error) {")
 	g.P("s := &", plugName(service), "{Impl: impl}")
-	g.P("c, err := ", g.QualifiedGoIdent(runtimePackage.Ident("Test")), "(s)")
+	g.P("c, err := ", g.QualifiedGoIdent(runtimePackage.Ident("Test")), launchArgs(service, i))
 	g.P("if err != nil {")
 	g.P("return nil, ", errorf, "(\"unable to load plugin: %w\", err)")
 	g.P("}")
@@ -252,18 +252,22 @@ func generateTest(g *protogen.GeneratedFile, service *protogen.Service) {
 	g.P("")
 }
 
-func fieldType(fd protoreflect.FieldDescriptor) string {
+func fieldType(g *protogen.GeneratedFile, field *protogen.Field) string {
+	fd := field.Desc
 	s := ""
 	if fd.IsList() {
 		s += "[]"
 	}
 	if fd.IsMap() {
-		s += "map[" + fd.MapKey().Kind().String() + "]"
-		s += fieldType(fd.MapValue())
+		s += "map["
+		s += fieldType(g, field.Message.Fields[0])
+		s += "]"
+		s += fieldType(g, field.Message.Fields[1])
 		return s
 	}
 	if msg := fd.Message(); msg != nil {
-		s += "*" + string(msg.Name())
+		fd.Message()
+		s += "*" + g.QualifiedGoIdent(field.Message.GoIdent)
 		return s
 	}
 	if fd.Kind() == protoreflect.BytesKind {
@@ -272,4 +276,16 @@ func fieldType(fd protoreflect.FieldDescriptor) string {
 		s += fd.Kind().String()
 	}
 	return s
+}
+
+func launchArgs(service *protogen.Service, serviceIndex int) string {
+	magic := proto.GetExtension(service.Desc.Options(), plugpb.E_Magic).(string)
+	if magic == "" {
+		magic = "magic"
+	}
+	version := proto.GetExtension(service.Desc.Options(), plugpb.E_Version).(uint32)
+	if version == 0 {
+		version = 1
+	}
+	return fmt.Sprintf("(s, \"%s\", %d, %d)", magic, version, serviceIndex)
 }

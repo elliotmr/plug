@@ -23,7 +23,7 @@ func (k *kvImpl) Put(key string, value []byte) error {
 }
 
 func main() {
-	err := example.Run(&kvImpl{m: make(map[string][]byte)})
+	err := example.RunKV(&kvImpl{m: make(map[string][]byte)})
 	if err != nil {
 		fmt.Println(err.Error(), ", exiting...")
 	}

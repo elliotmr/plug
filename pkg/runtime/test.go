@@ -8,7 +8,7 @@ import (
 // TestPlugin creates a communication pipes just like launching
 // the plugin normally, but instead of running from a sub-process
 // it simply runs the plugin in a go-routine.
-func Test(genPlugin GenPlugin) (*Host, error) {
+func Test(genPlugin GenPlugin, magic string, version uint32, serviceBase Service) (*Host, error) {
 	rRecv, lSend, err := os.Pipe()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create send pipe: %w", err)
@@ -17,7 +17,6 @@ func Test(genPlugin GenPlugin) (*Host, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create recv pipe: %w", err)
 	}
-
 
 	h := &Host{
 		t: &transport{
@@ -35,6 +34,7 @@ func Test(genPlugin GenPlugin) (*Host, error) {
 			buf: make([]byte, os.Getpagesize()),
 		},
 	}
-	go p.run()
-	return h, nil
+
+	go p.run(magic, version, serviceBase)
+	return h, h.handshake(magic, version, serviceBase)
 }

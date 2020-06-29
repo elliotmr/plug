@@ -1,5 +1,8 @@
 syntax = "proto3";
 
+import "google/protobuf/any.proto";
+import "plug.proto";
+
 package example;
 option go_package = "github.com/elliotmr/plug/example";
 
@@ -21,4 +24,18 @@ message Empty {}
 service KV {
     rpc Get(GetRequest) returns (GetResponse);
     rpc Put(PutRequest) returns (Empty);
+}
+
+message MarshalRequest {
+    map<string, google.protobuf.Any> data = 1;
+}
+
+message MarshalResponse {
+    bytes data = 2;
+}
+
+service Serializer {
+    option (plugpb.magic) = "s3rializer";
+    option (plugpb.version) = 2;
+    rpc Marshal(MarshalRequest) returns (MarshalResponse);
 }

@@ -9,7 +9,7 @@ import (
 )
 
 func TestKVPlugin(t *testing.T) {
-	c, err := example.Test(&kvImpl{m: make(map[string][]byte)})
+	c, err := example.TestKV(&kvImpl{m: make(map[string][]byte)})
 	require.NoError(t, err)
 	val, err := c.Get("test")
 	require.Error(t, err)
