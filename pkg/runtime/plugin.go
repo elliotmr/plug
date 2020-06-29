@@ -22,9 +22,8 @@ type plugin struct {
 	t *transport
 }
 
-// Run is the entrypoint for the plugin implementation. You must
-// pass your implementation wrapped in your generated plugin to
-// this function. Run will block forever.
+// Run is the entrypoint for the plugin implementation. It will
+// be wrapped by the plug generated Run function.
 func Run(genPlugin GenPlugin, magic string, version uint32, serviceBase Service) error {
 	fiIn, err := os.Stdin.Stat()
 	if err != nil {

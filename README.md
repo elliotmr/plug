@@ -18,7 +18,8 @@ using IPC and serialized protobufs. Here are a few differences:
   limitations that will probably not be addressed.
   
 If you want a system that is battle tested and well-supported, please use
-Hashicorp's go-plugin system. If you need something very simple that 
+Hashicorp's go-plugin system. If you need something very simple with good
+performance characteristics, this system might be for you.
   
 ## Usage
 
@@ -30,3 +31,10 @@ This package uses the new go protobuf implementation `google.golang.org/protobuf
 3. Generate both the go and plug code (See `example/gen.sh`)
 4. Implement a generated plugin interface (See `example/kv/main.go`)
 5. Use the plugin with the generated `Load{Service}` function.
+
+## Notes
+
+The plug generator will unwrap the root request and response types from your
+service rpc definition. If the message types include embedded types, you will
+be responsible for providing/consuming the protobuf type from the generated
+interface API.
