@@ -140,7 +140,11 @@ func generatePluginLink(g *protogen.GeneratedFile, service *protogen.Service) {
 
 func generatePluginMethod(g *protogen.GeneratedFile, service *protogen.Service, method *protogen.Method) {
 	g.P("func(x *", plugName(service), ") ", method.GoName, "(req proto.Message) (proto.Message, error) {")
-	g.P("in, ok := req.(*", method.Input.GoIdent, ")")
+	if len(method.Input.Fields) > 0 {
+		g.P("in, ok := req.(*", method.Input.GoIdent, ")")
+	} else {
+		g.P("_, ok := req.(*", method.Input.GoIdent, ")")
+	}
 	g.P("if !ok {")
 	g.P("return nil, ", errorf, "(\"invalid request type\")")
 	g.P("}")
@@ -167,7 +171,7 @@ func generatePluginMethod(g *protogen.GeneratedFile, service *protogen.Service, 
 
 	var wraps []string
 	for _, field := range method.Output.Fields {
-		wrap := field.GoName + ": " + string(field.Desc.Name()) + ", "
+		wrap := field.GoName + ": " + string(field.Desc.Name())
 		wraps = append(wraps, wrap)
 	}
 	wrapStatement := strings.Join(wraps, ", ")
